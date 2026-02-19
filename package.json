@@ -1,0 +1,6 @@
+{
+  "name": "moonbit-sql",
+  "dependencies": {
+    "pg": "^8.13.0"
+  }
+}
