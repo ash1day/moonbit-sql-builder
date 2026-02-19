@@ -1,9 +1,3 @@
-pub suberror PgError {
-  ConnectionError(String)
-  QueryError(String)
-  ParseError(String)
-}
-
 /// PostgreSQL connection wrapping a pg Client
 pub struct Connection {
   client : PgClient

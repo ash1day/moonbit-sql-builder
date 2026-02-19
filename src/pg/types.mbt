@@ -1,3 +1,9 @@
+pub suberror PgError {
+  ConnectionError(String)
+  QueryError(String)
+  ParseError(String)
+}
+
 /// Column value from a database row
 pub(all) enum ColumnValue {
   Null

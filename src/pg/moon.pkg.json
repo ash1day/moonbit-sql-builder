@@ -2,9 +2,15 @@
   "import": [
     "ash1day/sql/src/ast",
     "moonbitlang/async/js_async",
-    "moonbitlang/core/json"
+    "moonbitlang/core/json",
+    "mattn/postgres",
+    "moonbitlang/core/strconv"
   ],
   "targets": {
-    "ffi.js.mbt": ["js"]
+    "ffi.js.mbt": ["js"],
+    "pg.js.mbt": ["js"],
+    "pg.native.mbt": ["native"],
+    "pg_native_wbtest.mbt": ["native"],
+    "integration_native_wbtest.mbt": ["native"]
   }
 }
