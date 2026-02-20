@@ -286,9 +286,29 @@ pub fn SelectBuilder::where_(self : SelectBuilder, cond : @ast.Expr) -> SelectBu
   self
 }
 
-/// Add a GROUP BY column
+/// Add a GROUP BY column by name
 pub fn SelectBuilder::group_by(self : SelectBuilder, c : String) -> SelectBuilder {
   self.group_by_.push(@ast.Expr::Column(@ast.ColumnRef::Column(c)))
+  self
+}
+
+/// Add a GROUP BY with an arbitrary Expr (e.g. table-qualified column)
+pub fn SelectBuilder::group_by_expr(
+  self : SelectBuilder,
+  e : @ast.Expr
+) -> SelectBuilder {
+  self.group_by_.push(e)
+  self
+}
+
+/// Add multiple GROUP BY expressions at once
+pub fn SelectBuilder::group_by_exprs(
+  self : SelectBuilder,
+  exprs : Array[@ast.Expr]
+) -> SelectBuilder {
+  for e in exprs {
+    self.group_by_.push(e)
+  }
   self
 }
 
