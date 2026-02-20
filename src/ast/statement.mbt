@@ -37,6 +37,7 @@ pub(all) struct InsertStatement {
   table : TableRef
   columns : Array[String]
   values : Array[Array[Expr]]
+  select_ : SelectStatement?
   returning : Array[SelectItem]
   on_conflict : OnConflict?
 } derive(Show, Eq)

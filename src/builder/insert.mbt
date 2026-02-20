@@ -3,6 +3,7 @@ pub struct InsertBuilder {
   table_ : @ast.TableRef
   mut columns_ : Array[String]
   values_ : Array[Array[@ast.Expr]]
+  mut select__ : @ast.SelectStatement?
   returning_ : Array[@ast.SelectItem]
   mut on_conflict_ : @ast.OnConflict?
 }
@@ -13,6 +14,7 @@ pub fn insert_into(table : String) -> InsertBuilder {
     table_: @ast.TableRef::Table(table),
     columns_: [],
     values_: [],
+    select__: None,
     returning_: [],
     on_conflict_: None,
   }
@@ -37,6 +39,15 @@ pub fn InsertBuilder::returning(self : InsertBuilder, cols : Array[String]) -> I
       @ast.SelectItem::Expr(@ast.Expr::Column(@ast.ColumnRef::Column(c))),
     )
   }
+  self
+}
+
+/// Use a SELECT statement as the source for the INSERT
+pub fn InsertBuilder::from_select(
+  self : InsertBuilder,
+  sub : SelectBuilder
+) -> InsertBuilder {
+  self.select__ = Some(sub.build_statement())
   self
 }
 
@@ -65,8 +76,13 @@ pub fn InsertBuilder::on_conflict_do_update(
 
 /// Build the InsertBuilder into a CompiledQuery
 pub fn InsertBuilder::build(self : InsertBuilder) -> @ast.CompiledQuery raise {
-  if self.values_.is_empty() {
-    raise EmptyValues("INSERT requires at least one VALUES row")
+  match (self.values_.is_empty(), self.select__) {
+    (true, None) => raise EmptyValues("INSERT requires VALUES or SELECT")
+    (false, Some(_)) =>
+      raise ConflictingInsertSource(
+        "INSERT cannot use both VALUES and SELECT",
+      )
+    _ => ()
   }
   match self.on_conflict_ {
     Some({ columns, .. }) =>
@@ -81,6 +97,7 @@ pub fn InsertBuilder::build(self : InsertBuilder) -> @ast.CompiledQuery raise {
     table: self.table_,
     columns: self.columns_,
     values: self.values_,
+    select_: self.select__,
     returning: self.returning_,
     on_conflict: self.on_conflict_,
   }

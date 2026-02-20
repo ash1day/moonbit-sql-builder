@@ -39,6 +39,12 @@ pub(all) enum UnOp {
   Neg
 } derive(Show, Eq)
 
+/// WHEN condition THEN result clause for CASE expressions
+pub(all) struct WhenClause {
+  condition : Expr
+  result : Expr
+} derive(Show, Eq)
+
 /// SQL expression (used in WHERE, SELECT, etc.)
 pub(all) enum Expr {
   Column(ColumnRef)
@@ -57,6 +63,9 @@ pub(all) enum Expr {
   NotInSubquery(Expr, SelectStatement)
   Subquery(SelectStatement)
   WindowFunc(FuncCall, WindowSpec)
+  CaseExpr(Array[WhenClause], Expr?)
+  Exists(SelectStatement)
+  NotExists(SelectStatement)
 } derive(Show, Eq)
 
 /// SQL function call

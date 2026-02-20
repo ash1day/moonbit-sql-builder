@@ -96,3 +96,48 @@ pub fn in_sub(expr : @ast.Expr, sub : SelectBuilder) -> @ast.Expr {
 pub fn not_in_sub(expr : @ast.Expr, sub : SelectBuilder) -> @ast.Expr {
   expr.not_in_subquery(sub.build_statement())
 }
+
+/// EXISTS subquery check using SelectBuilder
+pub fn exists_(sub : SelectBuilder) -> @ast.Expr {
+  @ast.Expr::Exists(sub.build_statement())
+}
+
+/// NOT EXISTS subquery check using SelectBuilder
+pub fn not_exists(sub : SelectBuilder) -> @ast.Expr {
+  @ast.Expr::NotExists(sub.build_statement())
+}
+
+/// Builder for CASE WHEN ... THEN ... ELSE ... END expressions
+pub struct CaseBuilder {
+  branches : Array[@ast.WhenClause]
+  mut else_ : @ast.Expr?
+}
+
+/// Start a CASE expression
+pub fn case_() -> CaseBuilder {
+  { branches: [], else_: None }
+}
+
+/// Add a WHEN condition THEN result clause
+pub fn CaseBuilder::when_(
+  self : CaseBuilder,
+  cond : @ast.Expr,
+  then : @ast.Expr
+) -> CaseBuilder {
+  self.branches.push({ condition: cond, result: then })
+  self
+}
+
+/// Add an ELSE clause
+pub fn CaseBuilder::else_(self : CaseBuilder, default : @ast.Expr) -> CaseBuilder {
+  self.else_ = Some(default)
+  self
+}
+
+/// Finish building the CASE expression
+pub fn CaseBuilder::end(self : CaseBuilder) -> @ast.Expr raise {
+  if self.branches.is_empty() {
+    raise EmptyWhenClauses("CASE requires at least one WHEN clause")
+  }
+  @ast.Expr::CaseExpr(self.branches, self.else_)
+}

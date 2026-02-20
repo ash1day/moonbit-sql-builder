@@ -175,6 +175,33 @@ fn render_expr(ctx : RenderContext, expr : Expr) -> Unit {
       render_select_body(ctx, sub_stmt)
       ctx.write(")")
     }
+    CaseExpr(branches, else_) => {
+      ctx.write("CASE")
+      for branch in branches {
+        ctx.write(" WHEN ")
+        render_expr(ctx, branch.condition)
+        ctx.write(" THEN ")
+        render_expr(ctx, branch.result)
+      }
+      match else_ {
+        Some(default) => {
+          ctx.write(" ELSE ")
+          render_expr(ctx, default)
+        }
+        None => ()
+      }
+      ctx.write(" END")
+    }
+    Exists(sub_stmt) => {
+      ctx.write("EXISTS (")
+      render_select_body(ctx, sub_stmt)
+      ctx.write(")")
+    }
+    NotExists(sub_stmt) => {
+      ctx.write("NOT EXISTS (")
+      render_select_body(ctx, sub_stmt)
+      ctx.write(")")
+    }
     WindowFunc(func_call, win_spec) => {
       ctx.write(validate_func_name(func_call.name))
       ctx.write("(")
@@ -413,20 +440,28 @@ pub fn render_insert(stmt : InsertStatement) -> CompiledQuery {
     }
     ctx.write(")")
   }
-  // VALUES
-  ctx.write(" VALUES ")
-  for i, row in stmt.values {
-    if i > 0 {
-      ctx.write(", ")
+  // VALUES or SELECT
+  match stmt.select_ {
+    Some(sub_stmt) => {
+      ctx.write(" ")
+      render_select_body(ctx, sub_stmt)
     }
-    ctx.write("(")
-    for j, expr in row {
-      if j > 0 {
-        ctx.write(", ")
+    None => {
+      ctx.write(" VALUES ")
+      for i, row in stmt.values {
+        if i > 0 {
+          ctx.write(", ")
+        }
+        ctx.write("(")
+        for j, expr in row {
+          if j > 0 {
+            ctx.write(", ")
+          }
+          render_expr(ctx, expr)
+        }
+        ctx.write(")")
       }
-      render_expr(ctx, expr)
     }
-    ctx.write(")")
   }
   // ON CONFLICT
   match stmt.on_conflict {

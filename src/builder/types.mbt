@@ -3,4 +3,6 @@ pub suberror BuildError {
   EmptyAssignments(String)
   InvalidFuncName(String)
   EmptyConflictColumns(String)
+  EmptyWhenClauses(String)
+  ConflictingInsertSource(String)
 }

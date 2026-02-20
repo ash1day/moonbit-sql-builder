@@ -2479,3 +2479,276 @@ test "not_in_sub helper" {
   )
   assert_eq(q.params, [])
 }
+
+// ========================================================
+// CASE WHEN
+// ========================================================
+
+test "case when single condition" {
+  let q = select()
+    .expr(
+      case_()
+        .when_(col("status").eq(val_str("active")), val_str("Active"))
+        .end(),
+    )
+    .from("users")
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT CASE WHEN (\"status\" = $1) THEN $2 END FROM \"users\"",
+  )
+  assert_eq(
+    q.params,
+    [@ast.Value::String("active"), @ast.Value::String("Active")],
+  )
+}
+
+test "case when two conditions with else" {
+  let q = select()
+    .expr_as(
+      case_()
+        .when_(col("score").gte(val_int(90)), val_str("A"))
+        .when_(col("score").gte(val_int(70)), val_str("B"))
+        .else_(val_str("C"))
+        .end(),
+      "grade",
+    )
+    .from("students")
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT CASE WHEN (\"score\" >= $1) THEN $2 WHEN (\"score\" >= $3) THEN $4 ELSE $5 END AS \"grade\" FROM \"students\"",
+  )
+  assert_eq(
+    q.params,
+    [
+      @ast.Value::Int(90),
+      @ast.Value::String("A"),
+      @ast.Value::Int(70),
+      @ast.Value::String("B"),
+      @ast.Value::String("C"),
+    ],
+  )
+}
+
+test "case when without else" {
+  let q = select()
+    .expr(
+      case_()
+        .when_(col("active").eq(val_bool(true)), val_str("yes"))
+        .end(),
+    )
+    .from("users")
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT CASE WHEN (\"active\" = $1) THEN $2 END FROM \"users\"",
+  )
+  assert_eq(
+    q.params,
+    [@ast.Value::Bool(true), @ast.Value::String("yes")],
+  )
+}
+
+test "case when used in where clause" {
+  let q = select()
+    .all()
+    .from("orders")
+    .where_(
+      case_()
+        .when_(col("total").gt(val_int(1000)), val_str("large"))
+        .else_(val_str("small"))
+        .end()
+        .eq(val_str("large")),
+    )
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT * FROM \"orders\" WHERE (CASE WHEN (\"total\" > $1) THEN $2 ELSE $3 END = $4)",
+  )
+  assert_eq(
+    q.params,
+    [
+      @ast.Value::Int(1000),
+      @ast.Value::String("large"),
+      @ast.Value::String("small"),
+      @ast.Value::String("large"),
+    ],
+  )
+}
+
+test "case when select expr with alias" {
+  let q = select()
+    .column("name")
+    .expr_as(
+      case_()
+        .when_(col("role").eq(val_str("admin")), val_int(1))
+        .when_(col("role").eq(val_str("mod")), val_int(2))
+        .else_(val_int(0))
+        .end(),
+      "role_level",
+    )
+    .from("users")
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT \"name\", CASE WHEN (\"role\" = $1) THEN $2 WHEN (\"role\" = $3) THEN $4 ELSE $5 END AS \"role_level\" FROM \"users\"",
+  )
+  assert_eq(
+    q.params,
+    [
+      @ast.Value::String("admin"),
+      @ast.Value::Int(1),
+      @ast.Value::String("mod"),
+      @ast.Value::Int(2),
+      @ast.Value::Int(0),
+    ],
+  )
+}
+
+test "case end with no when clauses raises EmptyWhenClauses" {
+  let result = try {
+    Result::Ok(case_().end())
+  } catch {
+    err => Err(err)
+  }
+  match result {
+    Err(BuildError::EmptyWhenClauses(_)) => ()
+    _ => fail("expected EmptyWhenClauses")
+  }
+}
+
+// ========================================================
+// EXISTS / NOT EXISTS
+// ========================================================
+
+test "exists basic" {
+  let sub = select().column("id").from("orders").where_(col("user_id").eq(val_int(1)))
+  let q = select()
+    .all()
+    .from("users")
+    .where_(exists_(sub))
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT * FROM \"users\" WHERE EXISTS (SELECT \"id\" FROM \"orders\" WHERE (\"user_id\" = $1))",
+  )
+  assert_eq(q.params, [@ast.Value::Int(1)])
+}
+
+test "not exists basic" {
+  let sub = select().column("id").from("banned_users")
+  let q = select()
+    .all()
+    .from("users")
+    .where_(not_exists(sub))
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT * FROM \"users\" WHERE NOT EXISTS (SELECT \"id\" FROM \"banned_users\")",
+  )
+  assert_eq(q.params, [])
+}
+
+test "exists in where correlated style" {
+  let sub = select()
+    .column("id")
+    .from("orders")
+    .where_(table_col("orders", "user_id").eq(table_col("users", "id")))
+    .where_(col("total").gt(val_int(500)))
+  let q = select()
+    .all()
+    .from("users")
+    .where_(exists_(sub))
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT * FROM \"users\" WHERE EXISTS (SELECT \"id\" FROM \"orders\" WHERE ((\"orders\".\"user_id\" = \"users\".\"id\") AND (\"total\" > $1)))",
+  )
+  assert_eq(q.params, [@ast.Value::Int(500)])
+}
+
+test "exists combined with and condition" {
+  let sub = select().column("id").from("subscriptions").where_(col("active").eq(val_bool(true)))
+  let q = select()
+    .all()
+    .from("users")
+    .where_(col("age").gte(val_int(18)))
+    .where_(exists_(sub))
+    .build()
+  assert_eq(
+    q.sql,
+    "SELECT * FROM \"users\" WHERE ((\"age\" >= $1) AND EXISTS (SELECT \"id\" FROM \"subscriptions\" WHERE (\"active\" = $2)))",
+  )
+  assert_eq(q.params, [@ast.Value::Int(18), @ast.Value::Bool(true)])
+}
+
+// ========================================================
+// INSERT INTO ... SELECT
+// ========================================================
+
+test "insert from select basic" {
+  let sub = select().columns(["name", "email"]).from("old_users")
+  let q = insert_into("users").columns(["name", "email"]).from_select(sub).build()
+  assert_eq(
+    q.sql,
+    "INSERT INTO \"users\" (\"name\", \"email\") SELECT \"name\", \"email\" FROM \"old_users\"",
+  )
+  assert_eq(q.params, [])
+}
+
+test "insert from select with columns" {
+  let sub = select().columns(["username", "email"]).from("staging").where_(col("verified").eq(val_bool(true)))
+  let q = insert_into("users").columns(["name", "email"]).from_select(sub).build()
+  assert_eq(
+    q.sql,
+    "INSERT INTO \"users\" (\"name\", \"email\") SELECT \"username\", \"email\" FROM \"staging\" WHERE (\"verified\" = $1)",
+  )
+  assert_eq(q.params, [@ast.Value::Bool(true)])
+}
+
+test "insert from select with returning" {
+  let sub = select().columns(["name", "email"]).from("temp_users")
+  let q = insert_into("users")
+    .columns(["name", "email"])
+    .from_select(sub)
+    .returning(["id"])
+    .build()
+  assert_eq(
+    q.sql,
+    "INSERT INTO \"users\" (\"name\", \"email\") SELECT \"name\", \"email\" FROM \"temp_users\" RETURNING \"id\"",
+  )
+  assert_eq(q.params, [])
+}
+
+test "insert from select with where in sub" {
+  let sub = select()
+    .columns(["name", "score"])
+    .from("candidates")
+    .where_(col("score").gt(val_int(80)))
+  let q = insert_into("winners").columns(["name", "score"]).from_select(sub).build()
+  assert_eq(
+    q.sql,
+    "INSERT INTO \"winners\" (\"name\", \"score\") SELECT \"name\", \"score\" FROM \"candidates\" WHERE (\"score\" > $1)",
+  )
+  assert_eq(q.params, [@ast.Value::Int(80)])
+}
+
+test "insert values and select both set raises ConflictingInsertSource" {
+  let result = try {
+    let sub = select().all().from("other")
+    Result::Ok(
+      insert_into("users")
+        .columns(["name"])
+        .values([val_str("Alice")])
+        .from_select(sub)
+        .build(),
+    )
+  } catch {
+    err => Err(err)
+  }
+  match result {
+    Err(BuildError::ConflictingInsertSource(_)) => ()
+    _ => fail("expected ConflictingInsertSource")
+  }
+}
