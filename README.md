@@ -6,9 +6,24 @@ A SQL query builder for MoonBit with parameterized queries and PostgreSQL suppor
 
 - Builder DSL for SELECT / INSERT / UPDATE / DELETE
 - Parameterized queries (`$1`, `$2`, ...) — safe from SQL injection by default
-- PostgreSQL connection via JS target (node-postgres) and native target (mattn/postgres)
+- PostgreSQL connection on both **JS target** (Node.js via node-postgres) and **native target** (libpq via mattn/postgres)
 - Type-safe row decoding helpers
 - Advanced queries: subqueries, CTEs (WITH), UNION / INTERSECT / EXCEPT, upsert (INSERT ON CONFLICT), window functions
+
+## Prerequisites
+
+**JS target:** Node.js + `pg` npm package
+
+```bash
+npm install pg
+```
+
+**Native target:** libpq. On macOS with Homebrew:
+
+```bash
+brew install postgresql@14
+export C_INCLUDE_PATH="/opt/homebrew/include/postgresql@14"
+```
 
 ## Installation
 
@@ -21,6 +36,7 @@ Declare the packages you need in your `moon.pkg.json`:
 ```json
 {
   "import": [
+    "ash1day/sql/ast",
     "ash1day/sql/builder",
     "ash1day/sql/pg",
     "ash1day/sql/decode"
@@ -254,13 +270,12 @@ let sub = @builder.select()
 @builder.select().all().from_sub(sub, "active_users").build()
 // SELECT * FROM (SELECT "id", "name" FROM "users" WHERE "active" = $1) AS "active_users"
 
-// IN subquery
+// NOT IN subquery
 let banned = @builder.select().columns(["user_id"]).from("bans")
 @builder.select()
   .all()
   .from("users")
-  .where_(@builder.col("id").not_in_list([]))   // or:
-  // .where_(@builder.not_in_sub(@builder.col("id"), banned))
+  .where_(@builder.not_in_sub(@builder.col("id"), banned))
   .build()
 ```
 
@@ -334,34 +349,21 @@ Available: `union`, `union_all`, `intersect`, `intersect_all`, `except_`, `excep
 
 ## PostgreSQL Connection
 
-### JS Target (node-postgres)
-
-Requires `pg` npm package:
-
-```bash
-npm install pg
-```
+### JS Target (Node.js)
 
 ```moonbit
-async fn main() -> Unit raise {
-  let conn = @pg.Connection::connect("postgresql://user:pass@localhost/mydb").await()!
+async fn main {
+  let conn = @pg.Connection::connect("postgresql://user:pass@localhost/mydb").wait()!
   let q = @builder.select().all().from("users").build()
-  let rows = conn.query(q).await()!
-  conn.close().await()
+  let rows = conn.query(q).wait()!
+  conn.close().wait()
 }
 ```
 
-### Native Target (mattn/postgres)
-
-Requires libpq. On macOS with Homebrew:
-
-```bash
-brew install postgresql@14
-export C_INCLUDE_PATH="/opt/homebrew/include/postgresql@14"
-```
+### Native Target (libpq)
 
 ```moonbit
-fn main() -> Unit raise {
+fn main {
   let conn = @pg.Connection::connect("postgresql://user:pass@localhost/mydb")!
   let q = @builder.select().all().from("users").build()
   let rows = conn.query(q)!
@@ -390,10 +392,10 @@ The `decode` package provides typed accessors for `Row` values returned by `pg.q
 ```moonbit
 let rows = conn.query(q)!
 for row in rows {
-  let id    = @decode.get_int(row, "id")!        // Int!DecodeError
-  let name  = @decode.get_str(row, "name")!      // String!DecodeError
-  let bio   = @decode.get_optional_str(row, "bio")!  // String?!DecodeError
-  let score = @decode.get_double(row, "score")!  // Double!DecodeError
+  let id    = @decode.get_int(row, "id")!             // Int!DecodeError
+  let name  = @decode.get_str(row, "name")!           // String!DecodeError
+  let bio   = @decode.get_optional_str(row, "bio")!   // String?!DecodeError
+  let score = @decode.get_double(row, "score")!       // Double!DecodeError
 }
 ```
 
@@ -427,9 +429,10 @@ pub suberror DecodeError {
 ## Known Limitations
 
 - **Column names are strings.** Compile-time schema validation (like kysely's type-level column checking) is not available in MoonBit.
-- **JS target: Int64 from the database is returned as `Int` or `Double`.** JavaScript's `Number` type cannot represent values larger than 2⁵³ accurately, so very large integers from PostgreSQL may lose precision.
+- **`Int64` is never returned from query results.** The JS target converts all numeric values via JavaScript's `Number` (max safe integer: 2⁵³), so large integers become `Int` or `Double`. The native target uses heuristic string parsing that only attempts `Int` and `Double`. Use `get_int64` / `get_optional_int64` only when you are certain the value fits in a 32-bit integer and the driver returns it as `Int`.
+- **Native target: heuristic type detection.** Column values are returned as strings by libpq and converted heuristically. The single-character strings `"t"` and `"f"` are always interpreted as boolean `true`/`false`, which can conflict with actual string columns containing those values.
 - **Native target uses literal inlining.** Parameters are inlined as SQL literals rather than sent as protocol-level parameters. This is safe for all supported value types but differs from the JS target's behavior.
 
 ## License
 
-Apache-2.0
+MIT

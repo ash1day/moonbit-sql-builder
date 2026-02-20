@@ -1,6 +1,6 @@
 {
   "import": [
-    "ash1day/sql/src/ast",
+    "ash1day/sql/ast",
     "moonbitlang/async/js_async",
     "moonbitlang/core/json",
     "mattn/postgres",

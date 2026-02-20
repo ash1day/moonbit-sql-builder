@@ -7,7 +7,8 @@
   },
   "readme": "README.md",
   "repository": "https://github.com/ash1day/moonbit-sql",
-  "license": "Apache-2.0",
+  "license": "MIT",
+  "source": "src",
   "keywords": ["sql", "query-builder", "postgresql"],
   "description": "Type-safe SQL query builder for MoonBit"
 }

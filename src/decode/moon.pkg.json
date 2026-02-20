@@ -1,4 +1,4 @@
 {
-  "import": ["ash1day/sql/src/pg"],
-  "test-import": ["ash1day/sql/src/pg"]
+  "import": ["ash1day/sql/pg"],
+  "test-import": ["ash1day/sql/pg"]
 }
